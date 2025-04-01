@@ -144,7 +144,7 @@ The table below also provides the recall at 1, 5 and 10.
 | **Clotho, AudioCaps, WavCaps**   | 35.23      | 23.29   | 52.17   | 64.78    | NVIDIA A40         | 34h 44m      |
 
 
-### Create Predictions****
+### Create Predictions
 
 To create predictions for a specific checkpoint run:
 ```
