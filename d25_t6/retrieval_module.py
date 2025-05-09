@@ -2,7 +2,9 @@ import copy
 import math
 import string
 from typing import Any
-
+import os
+import ast
+import pandas as pd
 import numpy as np
 import torch
 from lightning import pytorch as pl
@@ -214,6 +216,33 @@ class AudioRetrievalModel(pl.LightningModule):
         self.log(f'{prefix}/R@10', r_10)
         self.log(f'{prefix}/mAP@10', mAP)
 
+        if os.path.exists(f'resources/metadata_eval.csv') and prefix == 'test':
+
+            matched_files = pd.read_csv(f'resources/metadata_eval.csv')
+            matched_files["audio_filenames"] = matched_files["audio_filenames"].transform(lambda x: ast.literal_eval(x))
+
+            def get_ranks(c, r):
+                ranks = [i.item() for i in torch.argsort(torch.argsort(-c))[r]]
+                return ranks
+
+            # index of query in C
+            matched_files["query_index"] = matched_files["query"].transform(lambda x: captions.tolist().index(x))
+
+            # new ground truth
+            matched_files["new_audio_indices"] = matched_files["audio_filenames"].transform(lambda x: [paths.tolist().index(y) for y in x])
+            matched_files["TP_ranks"] = matched_files.apply(lambda row: get_ranks(C[row["query_index"]], row["new_audio_indices"]), axis=1)
+
+            def average_precision_at_k(relevant_ranks, k=10):
+                relevant_ranks = sorted(relevant_ranks)
+                ap = 0.0
+                for i, rank in enumerate(relevant_ranks, start=1):
+                    if rank >= k:
+                        break
+                    ap += i / (rank + 1) # precision at threshold
+                return ap / len(relevant_ranks)  # Normalize by total number of relevant items
+
+            new_mAP = matched_files["TP_ranks"].apply(lambda ranks: average_precision_at_k(ranks, 10)).mean()
+            self.log(f'{prefix}_multiple_positives/mAP@10', new_mAP)
         # empty cached batches from validation loop
         self.validation_outputs.clear()
 

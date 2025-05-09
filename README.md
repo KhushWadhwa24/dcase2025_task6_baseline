@@ -17,7 +17,7 @@ While similar to previous editions, this year's evaluation setup introduces the 
 
 To support this, we provide additional correspondence annotations for audio-query pairs in the evaluation sets, enabling a more nuanced assessment of the retrieval systems' performance during development and final ranking.
 
-**The additional annotations for the evaluation set will be available soon.**
+**The additional annotations for the evaluation are now available, and the results are reported in the results table below.**
 
 ## Baseline System
 
@@ -131,17 +131,17 @@ Use options `--no-train --no-test` to just download the data sets.
 
 ## Baseline Results
 
-The primary evaluation metric of previous editions of this task was the **mean average precision at 10** (the metric might be changed once the new evaluation data set is available). 
+The primary evaluation metric of previous editions of this task was the **mean average precision at 10**. 
 For exact details on how the submissions will be ranked consult the [official task description](https://dcase.community/challenge2025/). 
 
 The table below also provides the recall at 1, 5 and 10.
 
-|                   **trained on** | **mAP@10** | **R@1** | **R@5** | **R@10** | trained on GPU     | avg. runtime |
-|---------------------------------:|:-----------|:--------|:--------|:---------|:-------------------|:-------------|
-|                     **ClothoV2** | 27.83      | 16.95   | 42.46   | 55.80    | NVIDIA A40         | 2h 16m       |
-|                     **ClothoV2** | 27.57      | 16.05   | 42.73   | 58.04    | NVIDIA RTX 2080 Ti | 8h 53m       |
-|            **Clotho, AudioCaps** | 30.97      | 19.56   | 46.45   | 59.48    | NVIDIA A40         | 7h 16m       |
-| **Clotho, AudioCaps, WavCaps**   | 35.23      | 23.29   | 52.17   | 64.78    | NVIDIA A40         | 34h 44m      |
+|                   **trained on** | **mAP@10** (new annotations) | **mAP@10** | **R@1** | **R@5** | **R@10** | trained on GPU     | avg. runtime |
+|---------------------------------:|:-----------------------------|:-----------|:--------|:--------|:---------|:-------------------|:-------------|
+|                     **ClothoV2** | 30.82                        | 27.83      | 16.95   | 42.46   | 55.80    | NVIDIA A40         | 2h 16m       |
+|                     **ClothoV2** | 31.95                        | 28.76      | 16.05      | 42.73   | 58.04    | NVIDIA RTX 2080 Ti | 8h 53m       |
+|            **Clotho, AudioCaps** | 32.85                        | 30.97      | 19.56      | 46.45   | 59.48    | NVIDIA A40         | 7h 16m       |
+| **Clotho, AudioCaps, WavCaps**   | 38.01                        | 35.23      | 23.29      | 52.17   | 64.78    | NVIDIA A40         | 34h 44m      |
 
 
 ### Create Predictions
