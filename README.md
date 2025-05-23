@@ -143,6 +143,7 @@ The table below also provides the recall at 1, 5 and 10.
 |            **Clotho, AudioCaps** | 32.85                        | 30.97      | 19.56      | 46.45   | 59.48    | NVIDIA A40         | 7h 16m       |
 | **Clotho, AudioCaps, WavCaps**   | 38.01                        | 35.23      | 23.29      | 52.17   | 64.78    | NVIDIA A40         | 34h 44m      |
 
+A checkpoint of the model trained on Clotho, AudioCaps, WavCaps is available [here](https://cloud.cp.jku.at/index.php/s/6ZTQ3mcwk9AAS4i).
 
 ### Create Predictions
 
