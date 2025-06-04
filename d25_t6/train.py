@@ -1,6 +1,6 @@
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="torch.functional")
-warnings.filterwarnings("ignore", category=FutureWarning, module="hear21passt.models.preprocess")
+# warnings.filterwarnings("ignore", category=FutureWarning, module="hear21passt.models.preprocess")
 
 import os
 from typing import Union, List, Mapping
