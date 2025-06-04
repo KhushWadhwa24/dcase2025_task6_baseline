@@ -160,8 +160,8 @@ def get_args() -> dict:
     parser.add_argument('--tau_trainable', default=False, action=argparse.BooleanOptionalAction, help='Temperature parameter is trainable or not.')
 
     # PaSST parameters
-    parser.add_argument('--s_patchout_t', type=int, default=15, help='Temporal patchout size')
-    parser.add_argument('--s_patchout_f', type=int, default=2, help='Frequency patchout size')
+    # parser.add_argument('--s_patchout_t', type=int, default=15, help='Temporal patchout size')
+    # parser.add_argument('--s_patchout_f', type=int, default=2, help='Frequency patchout size')
 
     # RoBERTa parameters
     parser.add_argument('--roberta_base', default=False, action=argparse.BooleanOptionalAction,  help='Use Roberta base or large.')

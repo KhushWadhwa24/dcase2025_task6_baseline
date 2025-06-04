@@ -14,74 +14,45 @@ class BEATsWrapper(torch.nn.Module):
         super().__init__()
         """
         Args:
-            s_patchout_t (int): Temporal patchout size.
-            s_patchout_f (int): Frequency patchout size.
+            device (str): Device used to load the model on
         """
-        super().__init__()
-        self.model = get_model_passt(
-                "passt_s_p16_s16_128_ap468",
-                input_tdim=1000,
-                fstride=16, # larger stride means less compute
-                tstride=16,
-                s_patchout_t=s_patchout_t, # more dropout means less compute
-                s_patchout_f=s_patchout_f
-            )
+        self.processor = BEATSProcessor.from_pretrained("microsoft/beats")
+        self.model = BEATSModel.from_pretrained("microsoft/beats")
+        self.device = device
+        self.model.to(self.device)
+        self.model.eval()  # Usually frozen for feature extraction
 
-        self.mel = AugmentMelSTFT(
-            n_mels=128,
-            sr=32000,
-            win_length=800,
-            hopsize=320,
-            n_fft=1024,
-            freqm=0,
-            timem=0,
-            htk=False,
-            fmin=0.0,
-            fmax=None,
-            norm=1,
-            fmin_aug_range=10,
-            fmax_aug_range=2000
+        # Optional: Add downsampling layer as mentioned in research papers
+        # self.downsample = nn.Conv1d(768, 768, kernel_size=3, stride=3)
         )
 
     def forward(self, x):
-        with torch.no_grad():
-            mel = self.mel(x)
-
-        tokens = self.model(mel[:, None])[-1] # get embedding, not token
-        return tokens
-
-
-class CutInputIntoSegmentsWrapper(nn.Module):
-    def __init__(self, model, max_input_length, segment_length, hop_size):
         """
         Args:
-            model (nn.Module): The PyTorch model to wrap.
-            max_input_length (int): Maximum length of input the model can handle.
-            segment_length (int): Length of each segment if input exceeds max_input_length.
-            hop_size (int): Hop size for overlapping segmentation.
+            x (Tensor): shape (batch, samples), 16kHz mono waveform
+        Returns:
+            Tensor: (batch, embedding_dim)
         """
-        super().__init__()
-        self.model = model
-        self.max_input_length = max_input_length
-        self.segment_length = segment_length
-        self.hop_size = hop_size
+        # If input is stereo, convert to mono
+        if x.ndim == 3:
+            x = x.mean(1)
+        
+        # Ensure 16kHz sampling rate (you may need to resample in preprocessing)
+        batch_size = x.shape[0]
+        
+        # Process with BEATs
+        inputs = self.processor(x.cpu().numpy(), sampling_rate=16000, return_tensors="pt", padding=True)
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
-    def forward(self, x):
-        """Processes the input audio through the model, handling segmentation if needed."""
-        batch_size, input_length = x.shape
-
-        if input_length <= self.max_input_length:
-            return self.model(x).unsqueeze(1)  # Add segment dimension
-
-        # Split into overlapping segments
-        segments = []
-        indices = list(range(0, input_length - self.segment_length + 1, self.hop_size))
-        for i in indices:
-            segments.append(x[:, i:i + self.segment_length])
-
-        segments = torch.stack(segments)  # Shape: (num_segments, batch_size, segment_length)
-        outputs = self.model(segments.reshape(-1, self.segment_length))  # Process each segment
-        outputs = outputs.view(len(indices), batch_size, -1).permute(1, 0, 2)   # Reshape back to (batch, num_segments , embedding_dim)
-
-        # Return segments separately
-        return outputs
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+            feats = outputs.last_hidden_state  # (batch, frames, 768)
+        
+        # Optional downsampling (as used in research papers)
+        feats = feats.transpose(1, 2)  # (batch, 768, frames)
+        feats = self.downsample(feats)  # (batch, 768, frames//3)
+        feats = feats.transpose(1, 2)  # (batch, frames//3, 768)
+        
+        # Pool across frames (mean pooling)
+        embedding = feats.mean(dim=1)  # (batch, 768)
+        return embedding.unsqueeze(1)  # Add segment dimension for compatibility

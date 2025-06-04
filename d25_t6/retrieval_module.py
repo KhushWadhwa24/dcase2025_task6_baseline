@@ -10,7 +10,8 @@ import torch
 from lightning import pytorch as pl
 from transformers import RobertaTokenizer, RobertaModel
 
-from d25_t6.passt import CutInputIntoSegmentsWrapper, PaSSTSNoOverlapWrapper
+# from d25_t6.passt import CutInputIntoSegmentsWrapper, PaSSTSNoOverlapWrapper
+from d25_t6.beats import BEATsWrapper
 
 
 class AudioRetrievalModel(pl.LightningModule):
