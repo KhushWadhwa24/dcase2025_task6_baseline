@@ -1,30 +1,32 @@
 import torch
 import torch.nn as nn
-# from hear21passt.base import get_model_passt, AugmentMelSTFT
-from transformers import BEATSProcessor, BEATSModel
+import sys
+import os
 
-import warnings
-# warnings.filterwarnings("ignore", category=FutureWarning, module="hearpasst")
-# warnings.filterwarnings("ignore", category=UserWarning, module="hearpasst")
+# Add BEATs path to Python path
+beats_path = "/path/to/unilm/beats"  
+sys.path.append(beats_path)
 
+from BEATs import BEATs, BEATsConfig
 
 class BEATsWrapper(torch.nn.Module):
-
-    def __init__(self, s_patchout_t=15, s_patchout_f=2):
+    def __init__(self, model_path="models/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt", device='cpu'):
         super().__init__()
         """
+        BEATs wrapper using official Microsoft implementation.
         Args:
-            device (str): Device used to load the model on
+            model_path (str): Path to the downloaded BEATs model
+            device (str): Device to load the model on
         """
-        self.processor = BEATSProcessor.from_pretrained("microsoft/beats")
-        self.model = BEATSModel.from_pretrained("microsoft/beats")
         self.device = device
-        self.model.to(self.device)
-        self.model.eval()  # Usually frozen for feature extraction
-
-        # Optional: Add downsampling layer as mentioned in research papers
-        # self.downsample = nn.Conv1d(768, 768, kernel_size=3, stride=3)
-        )
+        
+        # Load pre-trained BEATs model (following official example)
+        checkpoint = torch.load(model_path, map_location=device)
+        cfg = BEATsConfig(checkpoint['cfg'])
+        self.model = BEATs(cfg)
+        self.model.load_state_dict(checkpoint['model'])
+        self.model.to(device)
+        self.model.eval()
 
     def forward(self, x):
         """
@@ -37,22 +39,13 @@ class BEATsWrapper(torch.nn.Module):
         if x.ndim == 3:
             x = x.mean(1)
         
-        # Ensure 16kHz sampling rate (you may need to resample in preprocessing)
-        batch_size = x.shape[0]
+        # Create padding mask (all False for no padding, as in official example)
+        padding_mask = torch.zeros(x.shape[0], x.shape[1]).bool().to(self.device)
         
-        # Process with BEATs
-        inputs = self.processor(x.cpu().numpy(), sampling_rate=16000, return_tensors="pt", padding=True)
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
-
+        # Extract features using BEATs (following official API)
         with torch.no_grad():
-            outputs = self.model(**inputs)
-            feats = outputs.last_hidden_state  # (batch, frames, 768)
-        
-        # Optional downsampling (as used in research papers)
-        feats = feats.transpose(1, 2)  # (batch, 768, frames)
-        feats = self.downsample(feats)  # (batch, 768, frames//3)
-        feats = feats.transpose(1, 2)  # (batch, frames//3, 768)
+            representation = self.model.extract_features(x, padding_mask=padding_mask)[0]
         
         # Pool across frames (mean pooling)
-        embedding = feats.mean(dim=1)  # (batch, 768)
+        embedding = representation.mean(dim=1)  # (batch, 768)
         return embedding.unsqueeze(1)  # Add segment dimension for compatibility

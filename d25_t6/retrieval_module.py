@@ -26,6 +26,7 @@ class AudioRetrievalModel(pl.LightningModule):
 
         # audio encoder
         self.audio_embedding_model = BEATsWrapper(
+            model_path="models/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt",
             device=self.device 
             if hasattr(self, 'device') 
             else 'cpu'
