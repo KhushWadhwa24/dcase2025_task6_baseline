@@ -25,16 +25,13 @@ class AudioRetrievalModel(pl.LightningModule):
         self.save_hyperparameters(kwargs)
 
         # audio encoder
-        self.audio_embedding_model = CutInputIntoSegmentsWrapper(
-            PaSSTSNoOverlapWrapper(
-                s_patchout_t=kwargs['s_patchout_t'],
-                s_patchout_f=kwargs['s_patchout_f']
-            ),
-            max_input_length=10*32000,
-            segment_length=10*32000,
-            hop_size=10*32000
+        self.audio_embedding_model = BEATsWrapper(
+            device=self.device 
+            if hasattr(self, 'device') 
+            else 'cpu'
         )
-        self.audio_projection = torch.nn.Linear(768, 1024)
+        self.audio_projection = torch.nn.Linear(768, 1024)  # BEATs outputs 768-dim features
+
 
         # text encoder
         self.tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
@@ -65,7 +62,7 @@ class AudioRetrievalModel(pl.LightningModule):
             if properties.major >= 7 and self.kwargs['compile'] == True:
                 print("Compiling Models")
                 self.text_embedding_model = torch.compile(self.text_embedding_model)
-                self.audio_embedding_model.model.model = torch.compile(self.audio_embedding_model.model.model)
+                self.audio_embedding_model.model = torch.compile(self.audio_embedding_model.model)
 
     def forward(self, batch) -> Any:
 
@@ -76,22 +73,20 @@ class AudioRetrievalModel(pl.LightningModule):
         return audio_embeddings, text_embeddings
 
     def forward_audio(self, batch):
+        
+        # BEATs expects 16kHz mono audio
+        audio = batch['audio']
+        if audio.shape[1] > 1:
+            audio = audio.mean(1)  # Convert to mono if stereo
+    
+        # Forward through BEATs
+        audio_embeddings = self.audio_embedding_model(audio)  # (batch, 1, 768)
+    
+        # Remove the extra dimension and project
+        audio_embeddings = audio_embeddings.squeeze(1)  # (batch, 768)
+        audio_embeddings = self.audio_projection(audio_embeddings)  # (batch, 1024)
+        audio_embeddings = torch.nn.functional.normalize(audio_embeddings, p=2, dim=-1)
 
-        audio_embeddings = self.audio_embedding_model(batch['audio'].mean(1)) # forward
-
-        # mask embeddings from padded empty audio parts
-        aggregated = []
-        for i, duration in enumerate(batch['duration']):
-            if duration <= 10:
-                aggregated.append(audio_embeddings[i, 0])
-            elif duration <= 20:
-                aggregated.append(audio_embeddings[i, :2].mean(-2))
-            else:
-                aggregated.append(audio_embeddings[i].mean(-2))
-
-        audio_embeddings = torch.stack(aggregated)
-        audio_embeddings = self.audio_projection(audio_embeddings) # project to same dimension
-        audio_embeddings = torch.nn.functional.normalize(audio_embeddings, p=2, dim=-1) # normalize
         return audio_embeddings
 
     def forward_text(self, batch):
