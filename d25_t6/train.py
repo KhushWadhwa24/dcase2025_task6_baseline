@@ -68,7 +68,7 @@ def train(
         logger=logger if wandb.run else None,
         callbacks=[checkpoint_callback],
         max_epochs=args['max_epochs'],
-        precision="16-mixed",
+        precision="16-mixed",                 # changed from "16-mixed"
         num_sanity_val_steps=0,
         fast_dev_run=False
     )
@@ -112,7 +112,7 @@ def test(
         logger=logger if wandb.run else None,
         callbacks=None,
         max_epochs=args['max_epochs'],
-        precision="16-mixed",
+        precision="16-mixed",                     # changed from "16-mixed"
         num_sanity_val_steps=0,
         fast_dev_run=False
     )

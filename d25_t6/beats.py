@@ -4,8 +4,11 @@ import sys
 import os
 
 # Add BEATs path to Python path
-beats_path = "/path/to/unilm/beats"  
+beats_path = "/home/saubhagya23/khushal/DCASE/unilm/beats"  
 sys.path.append(beats_path)
+
+if not os.path.exists(beats_path):
+    raise FileNotFoundError(f"BEATs path not found: {beats_path}")
 
 from BEATs import BEATs, BEATsConfig
 
@@ -25,8 +28,12 @@ class BEATsWrapper(torch.nn.Module):
         cfg = BEATsConfig(checkpoint['cfg'])
         self.model = BEATs(cfg)
         self.model.load_state_dict(checkpoint['model'])
-        self.model.to(device)
+        self.model.to(self.device)
         self.model.eval()
+
+        # Prevent automatic mixed precision from affecting this model
+        for param in self.model.parameters():
+            param.requires_grad = False
 
     def forward(self, x):
         """
@@ -36,11 +43,18 @@ class BEATsWrapper(torch.nn.Module):
             Tensor: (batch, embedding_dim)
         """
         # If input is stereo, convert to mono
-        if x.ndim == 3:
-            x = x.mean(1)
-        
+        # if x.ndim == 3:
+        #     x = x.mean(1)
+            
+        # Ensure input is on the correct device and dtype
+        x = x.float().to(self.device)
+
+        # Convert to half precision if model is in half precision
+        # if next(self.model.parameters()).dtype == torch.float16:
+        #     x = x.half()
+
         # Create padding mask (all False for no padding, as in official example)
-        padding_mask = torch.zeros(x.shape[0], x.shape[1]).bool().to(self.device)
+        padding_mask = torch.zeros(x.shape[0], x.shape[1], dtype=torch.bool, device=x.device)
         
         # Extract features using BEATs (following official API)
         with torch.no_grad():
