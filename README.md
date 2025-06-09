@@ -132,16 +132,18 @@ Use options `--no-train --no-test` to just download the data sets.
 ## Baseline Results
 
 The primary evaluation metric of previous editions of this task was the **mean average precision at 10**. 
+This year, the focus is on mAP@16 on the Clotho dataset with additional annotations.
+
 For exact details on how the submissions will be ranked consult the [official task description](https://dcase.community/challenge2025/). 
 
 The table below also provides the recall at 1, 5 and 10.
 
-|                   **trained on** | **mAP@10** (new annotations) | **mAP@10** | **R@1** | **R@5** | **R@10** | trained on GPU     | avg. runtime |
+|                   **trained on** | **mAP@16** (new annotations) | **mAP@10** | **R@1** | **R@5** | **R@10** | trained on GPU     | avg. runtime |
 |---------------------------------:|:-----------------------------|:-----------|:--------|:--------|:---------|:-------------------|:-------------|
-|                     **ClothoV2** | 30.82                        | 27.83      | 16.95   | 42.46   | 55.80    | NVIDIA A40         | 2h 16m       |
-|                     **ClothoV2** | 31.95                        | 28.76      | 16.05      | 42.73   | 58.04    | NVIDIA RTX 2080 Ti | 8h 53m       |
-|            **Clotho, AudioCaps** | 32.85                        | 30.97      | 19.56      | 46.45   | 59.48    | NVIDIA A40         | 7h 16m       |
-| **Clotho, AudioCaps, WavCaps**   | 38.01                        | 35.23      | 23.29      | 52.17   | 64.78    | NVIDIA A40         | 34h 44m      |
+|                     **ClothoV2** | 32.82                        | 27.83      | 16.95   | 42.46   | 55.80    | NVIDIA A40         | 2h 16m       |
+|                     **ClothoV2** | 34.59                        | 28.76      | 16.05      | 42.73   | 58.04    | NVIDIA RTX 2080 Ti | 8h 53m       |
+|            **Clotho, AudioCaps** | 35.21                        | 30.97      | 19.56      | 46.45   | 59.48    | NVIDIA A40         | 7h 16m       |
+| **Clotho, AudioCaps, WavCaps**   | 40.59                        | 35.23      | 23.29      | 52.17   | 64.78    | NVIDIA A40         | 34h 44m      |
 
 A checkpoint of the model trained on Clotho, AudioCaps, WavCaps is available [here](https://cloud.cp.jku.at/index.php/s/6ZTQ3mcwk9AAS4i).
 
