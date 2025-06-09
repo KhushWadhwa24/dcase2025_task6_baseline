@@ -13,6 +13,17 @@ from transformers import RobertaTokenizer, RobertaModel
 # from d25_t6.passt import CutInputIntoSegmentsWrapper, PaSSTSNoOverlapWrapper
 from d25_t6.beats import BEATsWrapper
 
+def print_unused_params(model):
+    unused = []
+    for name, param in model.named_parameters():
+        if param.requires_grad and param.grad is None:
+            unused.append(name)
+    if unused:
+        print("Unused parameters:")
+        for name in unused:
+            print(name)
+    else:
+        print("All parameters used.")
 
 class AudioRetrievalModel(pl.LightningModule):
 
@@ -26,13 +37,16 @@ class AudioRetrievalModel(pl.LightningModule):
 
         # audio encoder
         self.audio_embedding_model = BEATsWrapper(
-            model_path="models/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt",
-            device=self.device 
-            if hasattr(self, 'device') 
-            else 'cpu'
+            checkpoint_path="models/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt"
         )
-        self.audio_projection = torch.nn.Linear(768, 1024)  # BEATs outputs 768-dim features
+        self.audio_projection = torch.nn.Identity()
 
+        # Get the actual feature dimension from BEATs
+        # beats_feature_dim = self.audio_embedding_model.get_feature_dim()
+        # self.audio_projection = torch.nn.Linear(768, 1024)  # BEATs outputs 768-dim features
+
+        for param in self.audio_embedding_model.model.parameters():
+            param.requires_grad = False
 
         # text encoder
         self.tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
@@ -77,14 +91,19 @@ class AudioRetrievalModel(pl.LightningModule):
         
         # BEATs expects 16kHz mono audio
         audio = batch['audio']
-        if audio.shape[1] > 1:
-            audio = audio.mean(1)  # Convert to mono if stereo
+
+        # If audio is (batch, 1, samples), squeeze channel
+        if audio.dim() == 3 and audio.shape[1] == 1:
+            audio = audio.squeeze(1)  # Now (batch, samples)
+
+        audio_embeddings = self.audio_embedding_model(audio)
+
+        # print("Audio shape before BEATs:", audio.shape)
     
         # Forward through BEATs
-        audio_embeddings = self.audio_embedding_model(audio)  # (batch, 1, 768)
+        audio_embeddings = self.audio_embedding_model(audio)  # (batch, 1024)
     
         # Remove the extra dimension and project
-        audio_embeddings = audio_embeddings.squeeze(1)  # (batch, 768)
         audio_embeddings = self.audio_projection(audio_embeddings)  # (batch, 1024)
         audio_embeddings = torch.nn.functional.normalize(audio_embeddings, p=2, dim=-1)
 
@@ -109,7 +128,7 @@ class AudioRetrievalModel(pl.LightningModule):
             max_length=32,
             truncation=True
         )
-
+        device = self.device
         token_embeddings = self.text_embedding_model(
             input_ids=tokenized['input_ids'].to(device),
             attention_mask=tokenized['attention_mask'].to(device)
@@ -127,10 +146,25 @@ class AudioRetrievalModel(pl.LightningModule):
 
         self.lr_scheduler_step(batch_idx)
 
+        # print("batch['audio'].shape:", batch['audio'].shape)
+        # print("batch['captions']:", batch['captions'])
+
         audio_embeddings, text_embeddings = self.forward(batch) # batch 1: sound IDs ['204046', '266329']; ['Paper_Parchment_Rustling.wav', 'metalTunnel.wav']
+
+        if audio_embeddings.dim() == 1:
+            audio_embeddings = audio_embeddings.unsqueeze(0)
+        # print("audio_embeddings.shape:", audio_embeddings.shape)
+        # print("text_embeddings.shape:", text_embeddings.shape)
+
+        
+
+        if audio_embeddings.shape[0] != text_embeddings.shape[0]:
+            raise ValueError("Batch size mismatch: audio and text must have same batch size.")
 
         # compute pairwise similarities
         C = torch.matmul(audio_embeddings, text_embeddings.T)
+
+        # print("C.shape:", C.shape)
 
         # scale cosine similarities with temperature < 1
         # (otherwise $-1 <= C_{ij} <= 1$)
@@ -150,6 +184,10 @@ class AudioRetrievalModel(pl.LightningModule):
         self.log('train/tau', torch.abs(self.tau), sync_dist=True)
 
         return loss
+    
+    # def on_after_backward(self):
+    #     print_unused_params(self)
+
 
     def validation_step(self, batch, batch_idx):
 

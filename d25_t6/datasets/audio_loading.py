@@ -65,12 +65,17 @@ def _custom_load_audio_mp3(self, index: int) -> Tensor:
     """
     fpath = self.at(index, "fpath")
     base, extension = os.path.splitext(fpath)
-    extension = extension[1:]
+    extension = extension[1:].lower()
+
+    # Add debugging
+    # print(f"Loading audio from: {fpath}")
+
     # replace WavCaps default folder with WavCaps_mp3
     base =  base.replace("WavCaps", "WavCaps_mp3")
     if extension == "flac": # load mp3 version of WavCaps
         fpath = ".".join([base, 'mp3'])
         extension = 'mp3'
+
     # load segment; truncate to 30 if longer than 30s
 
     if extension == "mp3":
@@ -81,11 +86,25 @@ def _custom_load_audio_mp3(self, index: int) -> Tensor:
         audio, sr = librosa.load(fpath, sr=16000, mono=True)
         audio = torch.tensor(audio).unsqueeze(0)
 
+    # Add debugging
+    # print(f"Audio shape after loading: {audio.shape}")
+    # print(f"Audio duration: {audio.shape[-1] / sr:.3f} seconds")
+
+    # Ensure minimum audio length
+    min_samples = 16000  # 1 second at 16kHz
+    if audio.shape[-1] < min_samples:
+        print(f"Warning: Audio too short ({audio.shape[-1]} samples), padding to {min_samples}")
+        padding = torch.zeros(audio.shape[0], min_samples - audio.shape[-1])
+        audio = torch.cat([audio, padding], dim=1)
+
     # Sanity check
-    if audio.nelement() == 0:
-        raise RuntimeError(
-            f"Invalid audio number of elements in {fpath}. (expected audio.nelement()={audio.nelement()} > 0)"
-        )
+    # if audio.nelement() == 0:
+    #     raise RuntimeError(
+    #         f"Invalid audio number of elements in {fpath}. (expected audio.nelement()={audio.nelement()} > 0)"
+    #     )
+
+    audio = _normalize_waveform_tensor(audio)
+    
     return audio
 
 
