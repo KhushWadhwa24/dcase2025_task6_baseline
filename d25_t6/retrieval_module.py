@@ -12,6 +12,18 @@ from transformers import RobertaTokenizer, RobertaModel
 
 from d25_t6.passt import CutInputIntoSegmentsWrapper, PaSSTSNoOverlapWrapper
 
+def print_unused_params(model):
+    unused = []
+    for name, param in model.named_parameters():
+        if param.requires_grad and param.grad is None:
+            unused.append(name)
+    if unused:
+        print("Unused parameters (trainable, no grad):")
+        for name in unused:
+            print(name)
+    else:
+        print("All trainable parameters used.")
+
 
 class AudioRetrievalModel(pl.LightningModule):
 
@@ -45,6 +57,14 @@ class AudioRetrievalModel(pl.LightningModule):
             output_hidden_states=False
         )
         self.text_projection = torch.nn.Linear(768 if kwargs['roberta_base'] else 1024, 1024)
+
+        # Freeze PaSST (audio encoder)
+        for param in self.audio_embedding_model.model.model.parameters():
+            param.requires_grad = False
+
+        # Freeze RoBERTa (text encoder)
+        for param in self.text_embedding_model.parameters():
+            param.requires_grad = False
 
         # temperature parameter
         initial_tau = torch.zeros((1,)) + kwargs['initial_tau']
@@ -125,6 +145,9 @@ class AudioRetrievalModel(pl.LightningModule):
         sentence_features = torch.nn.functional.normalize(sentence_features, p=2, dim=-1)
 
         return sentence_features
+
+    # def on_after_backward(self):
+    #     print_unused_params(self)
 
     def training_step(self, batch, batch_idx):
 
