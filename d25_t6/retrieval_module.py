@@ -9,8 +9,10 @@ import numpy as np
 import torch
 from lightning import pytorch as pl
 from transformers import RobertaTokenizer, RobertaModel
+import torch.nn as nn
 
 from d25_t6.passt import CutInputIntoSegmentsWrapper, PaSSTSNoOverlapWrapper
+from d25_t6.adapters.qformer import AudioBlock
 
 def print_unused_params(model):
     unused = []
@@ -47,6 +49,16 @@ class AudioRetrievalModel(pl.LightningModule):
         )
         self.audio_projection = torch.nn.Linear(768, 1024)
 
+        self.audio_qformer = AudioBlock(
+            input_dim=1024,
+            depth = 2,
+            heads = 16,
+            dropout = 0.1
+        )
+        num_queries = 16
+        self.query_tokens = nn.Parameter(torch.randn(1, num_queries, 1024))
+
+
         # text encoder
         self.tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
         self.text_embedding_model = RobertaModel.from_pretrained(
@@ -65,6 +77,10 @@ class AudioRetrievalModel(pl.LightningModule):
         # Freeze RoBERTa (text encoder)
         for param in self.text_embedding_model.parameters():
             param.requires_grad = False
+
+        # Unfreeze Q-Former
+        for param in self.audio_qformer.parameters():
+            param.requires_grad = True
 
         # temperature parameter
         initial_tau = torch.zeros((1,)) + kwargs['initial_tau']
@@ -87,10 +103,19 @@ class AudioRetrievalModel(pl.LightningModule):
                 self.audio_embedding_model.model.model = torch.compile(self.audio_embedding_model.model.model)
 
     def forward(self, batch) -> Any:
-
-        # embed audio & text
+        # Embed text as before
         text_embeddings = self.forward_text(batch)
-        audio_embeddings = self.forward_audio(batch)
+
+        # Prepare audio embeddings and queries
+        audio_embeddings_raw = self.audio_embedding_model(batch['audio'].mean(1))  # (batch, tokens, 768)
+        audio_embeddings_proj = self.audio_projection(audio_embeddings_raw)         # (batch, tokens, 1024)
+        batch_size = audio_embeddings_proj.size(0)
+        queries = self.query_tokens.expand(batch_size, -1, -1)                     # (batch, num_queries, 1024)
+
+        # Pass both queries and projected audio embeddings to AudioBlock
+        q_audio_emb = self.audio_qformer(queries, audio_embeddings_proj)           # (batch, num_queries, 1024)
+        pooled_audio_emb = q_audio_emb.mean(dim=1)                                 # (batch, 1024)
+        audio_embeddings = torch.nn.functional.normalize(pooled_audio_emb, p=2, dim=-1)
 
         return audio_embeddings, text_embeddings
 
@@ -99,19 +124,27 @@ class AudioRetrievalModel(pl.LightningModule):
         audio_embeddings = self.audio_embedding_model(batch['audio'].mean(1)) # forward
 
         # mask embeddings from padded empty audio parts
-        aggregated = []
-        for i, duration in enumerate(batch['duration']):
-            if duration <= 10:
-                aggregated.append(audio_embeddings[i, 0])
-            elif duration <= 20:
-                aggregated.append(audio_embeddings[i, :2].mean(-2))
-            else:
-                aggregated.append(audio_embeddings[i].mean(-2))
+        # aggregated = []
+        # for i, duration in enumerate(batch['duration']):
+        #     if duration <= 10:
+        #         aggregated.append(audio_embeddings[i, 0])
+        #     elif duration <= 20:
+        #         aggregated.append(audio_embeddings[i, :2].mean(-2))
+        #     else:
+        #         aggregated.append(audio_embeddings[i].mean(-2))
 
-        audio_embeddings = torch.stack(aggregated)
-        audio_embeddings = self.audio_projection(audio_embeddings) # project to same dimension
-        audio_embeddings = torch.nn.functional.normalize(audio_embeddings, p=2, dim=-1) # normalize
+        # audio_embeddings = torch.stack(aggregated)
+        # audio_embeddings = self.audio_projection(audio_embeddings) # project to same dimension
+        # audio_embeddings = torch.nn.functional.normalize(audio_embeddings, p=2, dim=-1) # normalize
+        # return audio_embeddings
+
+        audio_embeddings = self.audio_embedding_model(batch['audio'].mean(1))  # (batch, tokens, 1024)
+        q_audio_emb = self.audio_qformer(audio_embeddings)  # (batch, num_queries, 1024)
+        # Pool across queries (mean or other strategy)
+        pooled_audio_emb = q_audio_emb.mean(dim=1)  # (batch, 1024)
+        audio_embeddings = torch.nn.functional.normalize(pooled_audio_emb, p=2, dim=-1)
         return audio_embeddings
+
 
     def forward_text(self, batch):
 
