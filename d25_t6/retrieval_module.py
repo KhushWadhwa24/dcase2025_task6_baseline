@@ -13,6 +13,7 @@ import torch.nn as nn
 
 from d25_t6.passt import CutInputIntoSegmentsWrapper, PaSSTSNoOverlapWrapper
 from d25_t6.adapters.qformer import AudioBlock
+from d25_t6.adapters.mmadapter import AdapterBlock
 
 def print_unused_params(model):
     unused = []
@@ -25,6 +26,12 @@ def print_unused_params(model):
             print(name)
     else:
         print("All trainable parameters used.")
+
+def safe_literal_eval(x):
+    try:
+        return ast.literal_eval(x)
+    except (ValueError, SyntaxError):
+        return x  # or return None if you want to mark invalid entries
 
 
 class AudioRetrievalModel(pl.LightningModule):
@@ -58,6 +65,8 @@ class AudioRetrievalModel(pl.LightningModule):
         num_queries = 16
         self.query_tokens = nn.Parameter(torch.randn(1, num_queries, 1024))
 
+        # self.audio_adapter = AdapterBlock(d_model=1024, mid_dim=256, scale=0.1)
+        # self.text_adapter = AdapterBlock(d_model=1024, mid_dim=256, scale=0.1)
 
         # text encoder
         self.tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
@@ -116,6 +125,9 @@ class AudioRetrievalModel(pl.LightningModule):
         q_audio_emb = self.audio_qformer(queries, audio_embeddings_proj)           # (batch, num_queries, 1024)
         pooled_audio_emb = q_audio_emb.mean(dim=1)                                 # (batch, 1024)
         audio_embeddings = torch.nn.functional.normalize(pooled_audio_emb, p=2, dim=-1)
+
+        # audio_embeddings = self.audio_adapter(audio_embeddings)  # (batch, 1024)
+        # text_embeddings = self.text_adapter(text_embeddings)     # (batch, 1024)
 
         return audio_embeddings, text_embeddings
 
@@ -275,7 +287,9 @@ class AudioRetrievalModel(pl.LightningModule):
         if os.path.exists(f'resources/metadata_eval.csv') and prefix == 'test':
 
             matched_files = pd.read_csv(f'resources/metadata_eval.csv')
-            matched_files["audio_filenames"] = matched_files["audio_filenames"].transform(lambda x: ast.literal_eval(x))
+            # matched_files["audio_filenames"] = matched_files["audio_filenames"].transform(lambda x: ast.literal_eval(x))
+            matched_files["audio_filenames"] = matched_files["audio_filenames"].apply(safe_literal_eval)
+
 
             def get_ranks(c, r):
                 ranks = [i.item() for i in torch.argsort(torch.argsort(-c))[r]]
