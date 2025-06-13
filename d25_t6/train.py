@@ -219,7 +219,13 @@ if __name__ == '__main__':
 
     # initialize the model
     if args['load_ckpt_path']:
-        model = AudioRetrievalModel.load_from_checkpoint(args['load_ckpt_path'])
+        # model = AudioRetrievalModel.load_from_checkpoint(args['load_ckpt_path'])
+        model = AudioRetrievalModel(**args)
+        ckpt = torch.load(args['load_ckpt_path'], map_location='cpu')
+        state_dict = ckpt['state_dict'] if 'state_dict' in ckpt else ckpt
+        missing, unexpected = model.load_state_dict(state_dict, strict=False)
+        print("Missing keys:", missing)
+        print("Unexpected keys:", unexpected)
     else:
         model = AudioRetrievalModel(**args)
 

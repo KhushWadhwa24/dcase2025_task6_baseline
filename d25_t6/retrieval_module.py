@@ -33,6 +33,12 @@ def safe_literal_eval(x):
     except (ValueError, SyntaxError):
         return x  # or return None if you want to mark invalid entries
 
+def safe_index(x, captions):
+    try:
+        return captions.tolist().index(x)
+    except ValueError:
+        return -1  # or None, if you prefer
+
 
 class AudioRetrievalModel(pl.LightningModule):
 
@@ -65,8 +71,8 @@ class AudioRetrievalModel(pl.LightningModule):
         num_queries = 16
         self.query_tokens = nn.Parameter(torch.randn(1, num_queries, 1024))
 
-        # self.audio_adapter = AdapterBlock(d_model=1024, mid_dim=256, scale=0.1)
-        # self.text_adapter = AdapterBlock(d_model=1024, mid_dim=256, scale=0.1)
+        self.audio_adapter = AdapterBlock(d_model=1024, mid_dim=256, scale=0.1)
+        self.text_adapter = AdapterBlock(d_model=1024, mid_dim=256, scale=0.1)
 
         # text encoder
         self.tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
@@ -126,8 +132,8 @@ class AudioRetrievalModel(pl.LightningModule):
         pooled_audio_emb = q_audio_emb.mean(dim=1)                                 # (batch, 1024)
         audio_embeddings = torch.nn.functional.normalize(pooled_audio_emb, p=2, dim=-1)
 
-        # audio_embeddings = self.audio_adapter(audio_embeddings)  # (batch, 1024)
-        # text_embeddings = self.text_adapter(text_embeddings)     # (batch, 1024)
+        audio_embeddings = self.audio_adapter(audio_embeddings)  # (batch, 1024)
+        text_embeddings = self.text_adapter(text_embeddings)     # (batch, 1024)
 
         return audio_embeddings, text_embeddings
 
@@ -296,7 +302,7 @@ class AudioRetrievalModel(pl.LightningModule):
                 return ranks
 
             # index of query in C
-            matched_files["query_index"] = matched_files["query"].transform(lambda x: captions.tolist().index(x))
+            matched_files["query_index"] = matched_files["query"].apply(lambda x: safe_index(x, captions))
 
             # new ground truth
             matched_files["new_audio_indices"] = matched_files["audio_filenames"].transform(lambda x: [paths.tolist().index(y) for y in x])
@@ -311,8 +317,8 @@ class AudioRetrievalModel(pl.LightningModule):
                     ap += i / (rank + 1) # precision at threshold
                 return ap / len(relevant_ranks)  # Normalize by total number of relevant items
 
-            new_mAP = matched_files["TP_ranks"].apply(lambda ranks: average_precision_at_k(ranks, 10)).mean()
-            self.log(f'{prefix}_multiple_positives/mAP@10', new_mAP)
+            new_mAP = matched_files["TP_ranks"].apply(lambda ranks: average_precision_at_k(ranks, 16)).mean()
+            self.log(f'{prefix}_multiple_positives/mAP@16', new_mAP)
         # empty cached batches from validation loop
         self.validation_outputs.clear()
 

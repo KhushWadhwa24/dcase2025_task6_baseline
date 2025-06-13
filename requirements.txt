@@ -4,7 +4,10 @@ ffmpeg_python==0.2.0
 hear21passt==0.0.26
 librosa==0.11.0
 lightning==2.5.0.post0
+numpy==2.3.0
 pandas==2.2.3
+Requests==2.32.4
 tqdm==4.67.1
 transformers==4.49.0
+zeta==0.7b1
 wandb==0.19.8
